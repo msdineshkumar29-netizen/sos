@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RapidAid Emergency — App</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="sos.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" crossorigin=""/>
+  <meta name="theme-color" content="#0b1020">
+</head>
+<body>
+  <div id="bg" aria-hidden="true">
+    <!-- Inline ambulance SVG for background decoration -->
+    <svg id="ambulanceSvg" viewBox="0 0 64 64" aria-hidden="true" focusable="false" style="position:absolute;right:6%;bottom:6%;width:280px;opacity:0.12;mix-blend-mode:screen;filter:drop-shadow(0 8px 24px rgba(255,80,80,0.06));transform:rotate(-6deg)">
+      <rect x="2" y="18" width="40" height="22" rx="2" fill="#fff"/>
+      <rect x="34" y="10" width="20" height="16" rx="2" fill="#fff"/>
+      <circle cx="14" cy="44" r="4" fill="#222"/>
+      <circle cx="44" cy="44" r="4" fill="#222"/>
+      <rect x="6" y="22" width="28" height="12" rx="1" fill="#ff6b6b"/>
+      <rect x="36" y="12" width="12" height="10" rx="1" fill="#2376ff"/>
+      <g fill="#fff"><rect x="10" y="24" width="6" height="4"/><rect x="18" y="24" width="6" height="4"/></g>
+    </svg>
+  </div>
+
+  <header class="header">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="48" fill="url(#g)"/><defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#ff6b6b"/><stop offset="1" stop-color="#ffcc33"/></linearGradient></defs></svg>
+      <div class="title">RapidAid Emergency</div>
+    </div>
+    <nav class="nav">
+      <button id="prefBtn" aria-label="Open Preferences">⚙️</button>
+      <button id="helpBtn" aria-label="Open Help">❓</button>
+      <button id="diagBtn" aria-label="Run Diagnostics">🧪 Diagnostics</button>
+    </nav>
+
+  <!-- Diagnostics panel (hidden by default) -->
+  <aside id="diagPanel" class="diag-panel" aria-hidden="true">
+    <h3>Diagnostics</h3>
+    <pre id="diagOutput">No diagnostics run yet.</pre>
+    <pre id="nativeTestOutput" style="display:none;margin-top:8px;font-size:13px;background:rgba(255,255,255,0.02);padding:8px;border-radius:6px;max-height:220px;overflow:auto"></pre>
+
+    <div id="nativeHint" class="diag-hint" aria-live="polite">
+      <strong>Native plugin testing</strong>: Run this test on an Android device or emulator.
+      Steps: <ol style="margin:6px 0 6px 18px;padding:0;font-size:13px;line-height:1.35">
+        <li>Install Node &amp; npm on your dev machine.</li>
+        <li>Run <code>npm install</code> in the project root.</li>
+        <li>Install and sync plugins / platforms: <code>npx cap sync</code>.</li>
+        <li>Open Android Studio: <code>npx cap open android</code> and run on an emulator/device.</li>
+      </ol>
+      If testing in a browser, serve via HTTP/HTTPS (e.g. <code>npx http-server .</code>) to avoid dynamic-import CORS errors (the native plugin imports will fail in file:// or cross-origin iframe contexts).
+    </div>
+
+    <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+      <button id="copyNativeSteps" class="diag-copy">Copy steps</button>
+      <div id="copyFeedback" class="copy-feedback" aria-hidden="true">Steps copied to clipboard</div>
+    </div>
+
+    <div class="diag-send-wrapper" style="margin-top:10px">
+      <strong style="display:block;margin-bottom:6px">Recent send status</strong>
+      <ul id="sendStatus" class="diag-send-status" aria-live="polite" style="margin:0;padding-left:18px;max-height:120px;overflow:auto"></ul>
+    </div>
+
+    <button id="closeDiag">Close</button>
+  </aside>
+  </header>
+
+  <main class="main" role="main">
+    <section class="controls" aria-labelledby="user-info">
+      <div class="user" id="user-info">
+        <input id="userName" placeholder="Your Full Name" aria-label="Your name" />
+        <div class="contacts two">
+          <input id="contactPrimary" placeholder="Primary Contact (e.g. +123456789)" aria-label="Primary emergency contact" />
+          <input id="contactSecondary" placeholder="Secondary Contact (optional)" aria-label="Secondary emergency contact" />
+          <button id="saveContact">Save</button>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="sosBtn" class="sos pulse" aria-label="Send SOS">SOS</button>
+        <button id="voiceSOS" class="voice" aria-pressed="false">🎤 Voice</button>
+        <button id="shakeToggle" class="shake">🤳 Shake</button>
+      </div>
+
+      <div class="status-row">
+        <div id="statusBox" class="status">🟢 Ready</div>
+        <div id="timerBox" class="timer">00:00</div>
+        <button id="retryLoc" class="voice" aria-label="Retry Location">📍 Retry Location</button>
+      </div>
+
+      <div class="quick">
+        <a id="callBtn" class="fab" aria-label="Call emergency">📞</a>
+        <a class="fab ambulance" href="tel:108" aria-label="Call ambulance">🚑</a>
+        <button id="shareBtn" class="fab" aria-label="Share Location">🔗</button>
+        <button id="nativeTestBtn" class="fab" aria-label="Native test">🧪 Native Test</button>
+      </div>
+    </section>
+
+    <section class="map-section" aria-label="Live location map">
+      <div id="map" class="map" aria-hidden="false"></div>
+      <div class="map-info">
+        <div id="nearestHospital">Nearest hospital: —</div>
+        <div id="coords">Lat: —, Lng: —</div>
+        <div id="lastLocationError" class="location-error" aria-live="polite" style="display:none">Last location error: —</div>
+        <button id="useApproxBtn" class="voice" style="display:none;margin-top:8px">📡 Use approximate location (IP)</button>
+      </div>
+    </section>
+
+    <section class="first-aid" aria-labelledby="faid">
+      <h2 id="faid">Immediate First Aid</h2>
+      <div class="card-row">
+        <article class="card" role="button" tabindex="0" data-help="cpr">❤️ CPR</article>
+        <article class="card" role="button" tabindex="0" data-help="bleeding">🩸 Bleeding</article>
+        <article class="card" role="button" tabindex="0" data-help="unconscious">😵 Unconscious</article>
+        <article class="card" role="button" tabindex="0" data-help="burns">🔥 Burns</article>
+      </div>
+      <div id="helpBox" class="help-box"></div>
+    </section>
+
+    <section class="log" aria-live="polite">
+      <h3>Activity Log</h3>
+      <ul id="activityLog"></ul>
+    </section>
+
+  </main>
+
+  <div id="lockScreen" class="lock-screen" role="dialog" aria-hidden="true">
+    <div class="lock-content">
+      <div class="headline">🚨 EMERGENCY MODE</div>
+      <div id="countdown">Sending in 5...</div>
+      <button id="cancelSOS" class="cancel-btn">Cancel</button>
+    </div>
+  </div>
+
+  <audio id="siren" src="https://actions.google.com/sounds/v1/alarms/siren_whistle.ogg" preload="auto"></audio>
+  <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js" crossorigin=""></script>
+  <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+const CACHE_NAME = 'rapidaid-cache-v1'; const OFFLINE_URL = 'index.html';
+self.addEventListener('install', event => { event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll([OFFLINE_URL,'sos.css','script.js','manifest.json']))); self.skipWaiting(); });
+self.addEventListener('activate', event => { event.waitUntil(self.clients.claim()); });
+self.addEventListener('fetch', event => { if(event.request.method !== 'GET') return; event.respondWith(caches.match(event.request).then(resp => resp || fetch(event.request).then(networkResp => { caches.open(CACHE_NAME).then(cache => cache.put(event.request, networkResp.clone())); return networkResp; })).catch(()=>caches.match(OFFLINE_URL))); });
